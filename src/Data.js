@@ -23,7 +23,8 @@ export default {
   subscriptions: {},
   db: db,
   calls: [],
-
+  staleCollections: {},
+  staleSubscriptions: {},
   getUrl() {
     return this._endpoint.substring(0, this._endpoint.indexOf('/websocket'));
   },

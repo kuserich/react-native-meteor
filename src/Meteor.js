@@ -25,6 +25,32 @@ import ReactiveDict from './ReactiveDict';
 import User from './user/User';
 import Accounts from './user/Accounts';
 
+
+let isOrWasConnected = false;
+let hasReconnected = false;
+
+function areAllStaleSubscriptionsReadyAgain() {
+  for (let i in Data.subscriptions) {
+    const sub = Data.subscriptions[i];
+    if (Data.staleSubscriptions[sub.name] && !sub.ready) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function removeStaleDocumentsAfterReconnect() {
+  const has = Object.prototype.hasOwnProperty;
+  const collections = Object.keys(Data.staleCollections);
+  collections.forEach((collection) => {
+    if (has.call(Data.staleCollections, collection)) {
+        const liveDocumentIds = Data.staleCollections[collection];
+        Data.db[collection].remove({ _id: { $nin: liveDocumentIds }});
+    }
+  });
+  hasReconnected = false;
+}
+
 module.exports = {
   composeWithTracker,
   Accounts,
@@ -35,7 +61,7 @@ module.exports = {
   ReactiveDict,
   Collection,
   FSCollectionImagesPreloader:
-    Platform.OS == 'android' ? View : FSCollectionImagesPreloader,
+  Platform.OS == 'android' ? View : FSCollectionImagesPreloader,
   collection(name, options) {
     return new Collection(name, options);
   },
@@ -69,6 +95,10 @@ module.exports = {
       const sub = Data.subscriptions[i];
       Data.ddp.unsub(sub.subIdRemember);
       sub.subIdRemember = Data.ddp.sub(sub.name, sub.params);
+
+      if (hasReconnected) {
+          Data.staleSubscriptions[sub.subIdRemember] = true;
+      }
     }
   },
   waitDdpConnected: Data.waitDdpConnected.bind(Data),
@@ -95,16 +125,28 @@ module.exports = {
     });
 
     Data.ddp.on('connected', () => {
+      hasReconnected = isOrWasConnected && !hasReconnected;
+
+      if (hasReconnected) {
+        if (Data.db && Data.db.collections) {
+          for (var collection in Data.db.collections) {
+            Data.staleCollections[collection] = [];
+          }
+        }
+      }
+
       Data.notify('change');
 
       console.info('Connected to DDP server.');
       this._loadInitialUser().then(() => {
         this._subscriptionsRestart();
       });
+      isOrWasConnected = true;
     });
 
     let lastDisconnect = null;
     Data.ddp.on('disconnected', () => {
+      hasReconnected = false;
       Data.notify('change');
 
       console.info('Disconnected from DDP server.');
@@ -126,6 +168,12 @@ module.exports = {
         _id: message.id,
         ...message.fields,
       });
+
+      if (hasReconnected) {
+        if (Data.staleCollections[message.collection]) {
+          Data.staleCollections[message.collection].push(message.id);
+        }
+      }
     });
 
     Data.ddp.on('ready', message => {
@@ -143,10 +191,14 @@ module.exports = {
           sub.readyCallback && sub.readyCallback();
         }
       }
+
+      if (hasReconnected && areAllStaleSubscriptionsReadyAgain()) {
+        removeStaleDocumentsAfterReconnect();
+      }
     });
 
     Data.ddp.on('changed', message => {
-      const unset = {};
+        const unset = {};
       if (message.cleared) {
         message.cleared.forEach(field => {
           unset[field] = null;
@@ -162,7 +214,7 @@ module.exports = {
     });
 
     Data.ddp.on('removed', message => {
-      Data.db[message.collection] &&
+        Data.db[message.collection] &&
         Data.db[message.collection].del(message.id);
     });
     Data.ddp.on('result', message => {
