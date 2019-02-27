@@ -61,7 +61,7 @@ module.exports = {
   ReactiveDict,
   Collection,
   FSCollectionImagesPreloader:
-  Platform.OS == 'android' ? View : FSCollectionImagesPreloader,
+    Platform.OS == 'android' ? View : FSCollectionImagesPreloader,
   collection(name, options) {
     return new Collection(name, options);
   },
@@ -198,7 +198,7 @@ module.exports = {
     });
 
     Data.ddp.on('changed', message => {
-        const unset = {};
+      const unset = {};
       if (message.cleared) {
         message.cleared.forEach(field => {
           unset[field] = null;
@@ -214,7 +214,7 @@ module.exports = {
     });
 
     Data.ddp.on('removed', message => {
-        Data.db[message.collection] &&
+      Data.db[message.collection] &&
         Data.db[message.collection].del(message.id);
     });
     Data.ddp.on('result', message => {
