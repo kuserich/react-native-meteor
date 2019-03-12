@@ -32,7 +32,7 @@ let hasReconnected = false;
 function areAllStaleSubscriptionsReadyAgain() {
   for (let i in Data.subscriptions) {
     const sub = Data.subscriptions[i];
-    if (Data.staleSubscriptions[sub.name] && !sub.ready) {
+    if (Data.staleSubscriptions[sub.subIdRemember] || !sub.ready) {
       return false;
     }
   }
@@ -189,6 +189,10 @@ module.exports = {
           sub.ready = true;
           sub.readyDeps.changed();
           sub.readyCallback && sub.readyCallback();
+
+          if (Data.staleSubscriptions[sub.subIdRemember]) {
+            Data.staleSubscriptions[sub.subIdRemember] = false;
+          }
         }
       }
 
